@@ -9,7 +9,7 @@ enum HEValueId {
   Actuation = 1,
   InputPriorityPair = 2,
   Switch = 3,
-  SpecialLayer = 4,
+  CustomProfileLayer = 4,
   Version = 5,
 }
 
@@ -73,5 +73,98 @@ export async function setActuation(
     actuation.rtMode,
     actuation.rtPress,
     actuation.rtRelease,
+  );
+}
+
+export const PAIR_DISABLED = 255;
+export const NUM_INPUT_PRIORITY_PAIRS = 8;
+
+export enum PairResolution {
+  Last = 0,
+  Primary = 1,
+  Secondary = 2,
+  Neutral = 3,
+  Depth = 4,
+}
+
+// Which actuation profile a pair applies in.
+export enum PairProfile {
+  Default = 0,
+  Custom = 1,
+  All = 2,
+}
+
+export type InputPriorityPair = {
+  profile: number;
+  primaryRow: number;
+  primaryCol: number;
+  secondaryRow: number;
+  secondaryCol: number;
+  resolution: PairResolution;
+};
+
+export async function getInputPriorityPair(
+  api: KeyboardAPI,
+  index: number,
+): Promise<InputPriorityPair> {
+  const res = await api.getCustomMenuValue([
+    CUSTOM_CHANNEL,
+    HEValueId.InputPriorityPair,
+    index,
+  ]);
+  const [
+    profile,
+    primaryRow,
+    primaryCol,
+    secondaryRow,
+    secondaryCol,
+    resolution,
+  ] = res.slice(1);
+  return {
+    profile,
+    primaryRow,
+    primaryCol,
+    secondaryRow,
+    secondaryCol,
+    resolution,
+  };
+}
+
+export async function setInputPriorityPair(
+  api: KeyboardAPI,
+  index: number,
+  pair: InputPriorityPair,
+): Promise<void> {
+  await api.setCustomMenuValue(
+    CUSTOM_CHANNEL,
+    HEValueId.InputPriorityPair,
+    index,
+    pair.profile,
+    pair.primaryRow,
+    pair.primaryCol,
+    pair.secondaryRow,
+    pair.secondaryCol,
+    pair.resolution,
+  );
+}
+
+// The firmware calls this the special layer. 0 turns the Custom profile off.
+// Otherwise the value is the layer number plus 1.
+export async function getCustomProfileLayer(api: KeyboardAPI): Promise<number> {
+  const res = await api.getCustomMenuValue([
+    CUSTOM_CHANNEL,
+    HEValueId.CustomProfileLayer,
+  ]);
+  return res[1];
+}
+
+export async function setCustomProfileLayer(
+  api: KeyboardAPI,
+  value: number,
+): Promise<void> {
+  await api.setCustomMenuValue(
+    CUSTOM_CHANNEL,
+    HEValueId.CustomProfileLayer,
+    value,
   );
 }

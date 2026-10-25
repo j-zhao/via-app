@@ -7,6 +7,7 @@ import {ControlRow, Detail, Label, SpanOverflowCell} from '../grid';
 import {AccentRange} from '../../inputs/accent-range';
 import {AccentSelect} from '../../inputs/accent-select';
 import {AccentButton} from '../../inputs/accent-button';
+import {AccentSlider} from '../../inputs/accent-slider';
 import {ErrorMessage} from '../../styled';
 import {NumberInput} from './submenus/macros/keycode-sequence-components';
 import {useAppDispatch, useAppSelector} from 'src/store/hooks';
@@ -14,6 +15,7 @@ import {getSelectedKeyboardAPI} from 'src/store/devicesSlice';
 import {getSelectedKeyDefinitions} from 'src/store/definitionsSlice';
 import {
   getExtraSelectedKeys,
+  getNumberOfLayers,
   getSelectedKey,
   setSelectedKeys,
   updateSelectedKey,
@@ -23,8 +25,10 @@ import {
   RESET_AT_ACTUATION,
   RapidTriggerMode,
   getActuation,
+  getCustomProfileLayer,
   mmToUnits,
   setActuation,
+  setCustomProfileLayer,
   unitsToMm,
 } from 'src/utils/hall-effect';
 
@@ -41,8 +45,8 @@ const Container = styled.div`
 `;
 
 const PROFILE_OPTIONS = [
-  {label: 'Universal', value: 0},
-  {label: 'Special layer', value: 1},
+  {label: 'Default', value: 0},
+  {label: 'Custom', value: 1},
 ];
 
 const RT_OPTIONS = [
@@ -55,6 +59,11 @@ const RT_OPTIONS = [
 const ACTUATION_MM = {min: 0.2, max: 3.4, step: 0.1};
 const RT_MM = {min: 0.1, max: 1.0, step: 0.05};
 const DEFAULT_RT_MM = 0.2;
+// Gap between actuation and a new explicit release point.
+const RELEASE_GAP_UNITS = mmToUnits(0.1);
+// The firmware rejects an explicit release point below 7 units (0.1 mm).
+const RELEASE_MIN_MM = 0.1;
+const RELEASE_MIN_UNITS = mmToUnits(RELEASE_MIN_MM);
 
 const roundMm = (mm: number) => Math.round(mm * 100) / 100;
 
@@ -214,6 +223,39 @@ export const Pane: FC = () => {
   const [actuation, setLocalActuation] = useState<Actuation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [customProfileLayer, setLocalCustomProfileLayer] = useState<
+    number | null
+  >(null);
+  const numberOfLayers = useAppSelector(getNumberOfLayers);
+  const [layerError, setLayerError] = useState<string | null>(null);
+  const customProfileLayerOptions = [
+    {label: 'Off', value: 0},
+    ...Array.from({length: numberOfLayers}, (_, layer) => ({
+      label: `Layer ${layer}`,
+      value: layer + 1,
+    })),
+  ];
+
+  useEffect(() => {
+    if (api) {
+      getCustomProfileLayer(api)
+        .then(setLocalCustomProfileLayer)
+        .catch((e) => setLayerError(String(e)));
+    }
+  }, [api]);
+
+  const changeCustomProfileLayer = async (value: number) => {
+    if (!api) {
+      return;
+    }
+    try {
+      await setCustomProfileLayer(api, value);
+      setLocalCustomProfileLayer(await getCustomProfileLayer(api));
+      setLayerError(null);
+    } catch (e) {
+      setLayerError(String(e));
+    }
+  };
 
   const key = selectedKey !== null ? keys[selectedKey] : null;
   const selection =
@@ -277,16 +319,13 @@ export const Pane: FC = () => {
     let saved = 0;
     setSaving(true);
     try {
-      // Write only the fields this pane edits. Each key keeps its own release values.
+      // Rapid Trigger ignores an explicit release point, and the firmware rejects stale ones.
+      const toWrite =
+        actuation.rtMode === RapidTriggerMode.Off
+          ? actuation
+          : {...actuation, resetPoint: RESET_AT_ACTUATION};
       for (const idx of targets) {
-        const {row, col} = keys[idx];
-        const current = await getActuation(api, profile, row, col);
-        await setActuation(api, profile, row, col, {
-          ...current,
-          actuationPoint: actuation.actuationPoint,
-          rtMode: actuation.rtMode,
-          rtPress: actuation.rtPress,
-        });
+        await setActuation(api, profile, keys[idx].row, keys[idx].col, toWrite);
         saved++;
       }
       setError(null);
@@ -303,19 +342,56 @@ export const Pane: FC = () => {
   const update = (change: Partial<Actuation>) =>
     actuation && setLocalActuation({...actuation, ...change});
 
+  const hasReleasePoint =
+    actuation !== null && actuation.resetPoint !== RESET_AT_ACTUATION;
+  const hasReleaseSensitivity = actuation !== null && actuation.rtRelease !== 0;
+  const releasePointFor = (actuationPoint: number) =>
+    Math.max(RELEASE_MIN_UNITS, actuationPoint - RELEASE_GAP_UNITS);
+
+  // The release point must stay below the actuation point, so move it with actuation.
+  const setActuationPoint = (actuationPoint: number) =>
+    update({
+      actuationPoint,
+      ...(hasReleasePoint && actuation!.resetPoint >= actuationPoint
+        ? {resetPoint: releasePointFor(actuationPoint)}
+        : {}),
+    });
+
+  // Rapid Trigger computes its own release point, so turning it on clears an explicit one.
   const setRtMode = (rtMode: RapidTriggerMode) =>
     update({
       rtMode,
-      rtPress:
-        rtMode !== RapidTriggerMode.Off && actuation?.rtPress === 0
-          ? mmToUnits(DEFAULT_RT_MM)
-          : actuation?.rtPress,
+      ...(rtMode !== RapidTriggerMode.Off && {
+        resetPoint: RESET_AT_ACTUATION,
+        rtPress: actuation?.rtPress || mmToUnits(DEFAULT_RT_MM),
+      }),
     });
 
   return (
     <SpanOverflowCell>
       <HallEffectPane>
         <Container>
+          <ControlRow>
+            <Label>
+              Custom profile layer
+              <HelpText>
+                While this layer is the highest active layer, keys use the
+                Custom profile. Saved immediately.
+              </HelpText>
+            </Label>
+            <Detail>
+              {customProfileLayer !== null && numberOfLayers > 0 && (
+                <AccentSelect
+                  value={customProfileLayerOptions[customProfileLayer]}
+                  options={customProfileLayerOptions}
+                  onChange={(option: any) =>
+                    changeCustomProfileLayer(option.value)
+                  }
+                />
+              )}
+            </Detail>
+          </ControlRow>
+          {layerError && <ErrorMessage>{layerError}</ErrorMessage>}
           <ControlRow>
             <Label>Profile</Label>
             <Detail>
@@ -354,10 +430,61 @@ export const Pane: FC = () => {
                   <MmSlider
                     {...ACTUATION_MM}
                     units={actuation.actuationPoint}
-                    onChange={(units) => update({actuationPoint: units})}
+                    onChange={setActuationPoint}
                   />
                 </Detail>
               </ControlRow>
+              {actuation.rtMode === RapidTriggerMode.Off && (
+                <ControlRow>
+                  <Label>
+                    Separate release point
+                    <HelpText>
+                      Off: the key releases about 0.1 mm above the actuation
+                      point.
+                    </HelpText>
+                  </Label>
+                  <Detail>
+                    <AccentSlider
+                      isChecked={hasReleasePoint}
+                      onChange={(on) =>
+                        update({
+                          resetPoint: on
+                            ? releasePointFor(actuation.actuationPoint)
+                            : RESET_AT_ACTUATION,
+                        })
+                      }
+                    />
+                  </Detail>
+                </ControlRow>
+              )}
+              {actuation.rtMode === RapidTriggerMode.Off && hasReleasePoint && (
+                <ControlRow>
+                  <Label>
+                    Release point (mm)
+                    <HelpText>
+                      The key releases when it comes back above this depth.
+                    </HelpText>
+                  </Label>
+                  <Detail>
+                    <MmSlider
+                      min={RELEASE_MIN_MM}
+                      max={roundMm(
+                        unitsToMm(releasePointFor(actuation.actuationPoint)),
+                      )}
+                      step={0.1}
+                      units={actuation.resetPoint}
+                      onChange={(units) =>
+                        update({
+                          resetPoint: Math.min(
+                            units,
+                            releasePointFor(actuation.actuationPoint),
+                          ),
+                        })
+                      }
+                    />
+                  </Detail>
+                </ControlRow>
+              )}
               <ControlRow>
                 <Label>Rapid Trigger</Label>
                 <Detail>
@@ -371,10 +498,13 @@ export const Pane: FC = () => {
               {actuation.rtMode !== RapidTriggerMode.Off && (
                 <ControlRow>
                   <Label>
-                    Sensitivity (mm)
+                    {hasReleaseSensitivity
+                      ? 'Press sensitivity (mm)'
+                      : 'Sensitivity (mm)'}
                     <HelpText>
-                      How far the key must move in the other direction to press
-                      or release again.
+                      {hasReleaseSensitivity
+                        ? 'After a release, the key presses again when it moves down by this distance.'
+                        : 'How far the key must move in the other direction to press or release again.'}
                     </HelpText>
                   </Label>
                   <Detail>
@@ -386,6 +516,43 @@ export const Pane: FC = () => {
                   </Detail>
                 </ControlRow>
               )}
+              {actuation.rtMode !== RapidTriggerMode.Off && (
+                <ControlRow>
+                  <Label>
+                    Separate release sensitivity
+                    <HelpText>
+                      Off: release uses the press sensitivity.
+                    </HelpText>
+                  </Label>
+                  <Detail>
+                    <AccentSlider
+                      isChecked={hasReleaseSensitivity}
+                      onChange={(on) =>
+                        update({rtRelease: on ? actuation.rtPress : 0})
+                      }
+                    />
+                  </Detail>
+                </ControlRow>
+              )}
+              {actuation.rtMode !== RapidTriggerMode.Off &&
+                hasReleaseSensitivity && (
+                  <ControlRow>
+                    <Label>
+                      Release sensitivity (mm)
+                      <HelpText>
+                        After a press, the key releases when it moves up by this
+                        distance.
+                      </HelpText>
+                    </Label>
+                    <Detail>
+                      <MmSlider
+                        {...RT_MM}
+                        units={actuation.rtRelease}
+                        onChange={(units) => update({rtRelease: units})}
+                      />
+                    </Detail>
+                  </ControlRow>
+                )}
               <StoredValues actuation={actuation} />
               <ControlRow>
                 <Label />

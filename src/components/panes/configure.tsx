@@ -20,6 +20,7 @@ import * as Macros from './configure-panes/macros';
 import * as SaveLoad from './configure-panes/save-load';
 import * as Layouts from './configure-panes/layouts';
 import * as HallEffect from './configure-panes/hall-effect';
+import * as Socd from './configure-panes/socd';
 import * as RotaryEncoder from './configure-panes/custom/satisfaction75';
 import {makeCustomMenus} from './configure-panes/custom/menu-generator';
 import {LayerControl} from './configure-panes/layer-control';
@@ -78,8 +79,11 @@ const Rows = [
   SaveLoad,
   RotaryEncoder,
   HallEffect,
+  Socd,
   ...makeCustomMenus([]),
 ];
+
+const MULTI_SELECT_TITLES = [HallEffect.Title, Socd.Title];
 
 function getCustomPanes(customFeatures: CustomFeaturesV2[]) {
   if (
@@ -110,7 +114,7 @@ const getRowsForKeyboard = (): typeof Rows => {
         SaveLoad,
       ]),
       ...(isHallEffectKeyboard(selectedDefinition.vendorProductId)
-        ? [HallEffect]
+        ? [HallEffect, Socd]
         : []),
       ...v3Menus,
     ];
@@ -264,12 +268,15 @@ const ConfigureGrid = () => {
   const selectedTitle = KeyboardRows[selectedRow]?.Title;
 
   useEffect(() => {
-    if (selectedTitle !== 'Keymap' && selectedTitle !== HallEffect.Title) {
+    if (
+      selectedTitle !== 'Keymap' &&
+      !MULTI_SELECT_TITLES.includes(selectedTitle)
+    ) {
       dispatch(setConfigureKeyboardIsSelectable(false));
     } else {
       dispatch(setConfigureKeyboardIsSelectable(true));
     }
-    dispatch(setAllowMultiSelect(selectedTitle === HallEffect.Title));
+    dispatch(setAllowMultiSelect(MULTI_SELECT_TITLES.includes(selectedTitle)));
   }, [selectedTitle]);
 
   return (
