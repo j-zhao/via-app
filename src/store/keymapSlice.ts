@@ -24,6 +24,9 @@ type KeymapState = {
   numberOfLayers: number;
   selectedLayerIndex: number;
   selectedKey: number | null;
+  // Keys selected with Ctrl+click in addition to selectedKey.
+  extraSelectedKeys: number[];
+  allowMultiSelect: boolean;
   configureKeyboardIsSelectable: boolean;
   selectedPaletteColor: [number, number];
 };
@@ -33,6 +36,8 @@ const initialState: KeymapState = {
   numberOfLayers: 4,
   selectedLayerIndex: 0,
   selectedKey: null,
+  extraSelectedKeys: [],
+  allowMultiSelect: false,
   configureKeyboardIsSelectable: false,
   selectedPaletteColor: [0, 0],
 };
@@ -55,6 +60,10 @@ const keymapSlice = createSlice({
       action: PayloadAction<boolean>,
     ) => {
       state.configureKeyboardIsSelectable = action.payload;
+    },
+    setAllowMultiSelect: (state, action: PayloadAction<boolean>) => {
+      state.allowMultiSelect = action.payload;
+      state.extraSelectedKeys = [];
     },
     // Writes a single layer to the device layer map
     loadLayerSuccess: (
@@ -82,9 +91,38 @@ const keymapSlice = createSlice({
     },
     clearSelectedKey: (state) => {
       state.selectedKey = null;
+      state.extraSelectedKeys = [];
     },
     updateSelectedKey: (state, action: PayloadAction<number | null>) => {
       state.selectedKey = action.payload;
+      state.extraSelectedKeys = [];
+    },
+    // An additive selection toggles the key and keeps the primary key, so the
+    // values being edited stay in place.
+    selectKey: (
+      state,
+      action: PayloadAction<{idx: number; additive: boolean}>,
+    ) => {
+      const {idx, additive} = action.payload;
+      if (!additive || !state.allowMultiSelect) {
+        state.selectedKey = idx;
+        state.extraSelectedKeys = [];
+      } else if (state.extraSelectedKeys.includes(idx)) {
+        state.extraSelectedKeys = state.extraSelectedKeys.filter(
+          (key) => key !== idx,
+        );
+      } else if (state.selectedKey === idx) {
+        state.selectedKey = state.extraSelectedKeys.pop() ?? null;
+      } else if (state.selectedKey === null) {
+        state.selectedKey = idx;
+      } else {
+        state.extraSelectedKeys.push(idx);
+      }
+    },
+    setSelectedKeys: (state, action: PayloadAction<number[]>) => {
+      const [first, ...rest] = action.payload;
+      state.selectedKey = first ?? null;
+      state.extraSelectedKeys = rest;
     },
     saveKeymapSuccess: (
       state,
@@ -111,6 +149,7 @@ const keymapSlice = createSlice({
   extraReducers: (builder) => {
     builder.addCase(selectDevice, (state) => {
       state.selectedKey = null;
+      state.extraSelectedKeys = [];
     });
   },
 });
@@ -122,6 +161,9 @@ export const {
   clearSelectedKey,
   setKey,
   updateSelectedKey,
+  selectKey,
+  setSelectedKeys,
+  setAllowMultiSelect,
   saveKeymapSuccess,
   setConfigureKeyboardIsSelectable,
   setSelectedPaletteColor,
@@ -202,6 +244,8 @@ export const updateKey =
 export const getConfigureKeyboardIsSelectable = (state: RootState) =>
   state.keymap.configureKeyboardIsSelectable;
 export const getSelectedKey = (state: RootState) => state.keymap.selectedKey;
+export const getExtraSelectedKeys = (state: RootState) =>
+  state.keymap.extraSelectedKeys;
 export const getRawDeviceMap = (state: RootState) => state.keymap.rawDeviceMap;
 export const getNumberOfLayers = (state: RootState) =>
   state.keymap.numberOfLayers;

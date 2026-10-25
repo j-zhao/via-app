@@ -19,6 +19,7 @@ import * as Lighting from './configure-panes/lighting';
 import * as Macros from './configure-panes/macros';
 import * as SaveLoad from './configure-panes/save-load';
 import * as Layouts from './configure-panes/layouts';
+import * as HallEffect from './configure-panes/hall-effect';
 import * as RotaryEncoder from './configure-panes/custom/satisfaction75';
 import {makeCustomMenus} from './configure-panes/custom/menu-generator';
 import {LayerControl} from './configure-panes/layer-control';
@@ -31,6 +32,7 @@ import {
   clearSelectedKey,
   getLoadProgress,
   getNumberOfLayers,
+  setAllowMultiSelect,
   setConfigureKeyboardIsSelectable,
 } from 'src/store/keymapSlice';
 import {useDispatch} from 'react-redux';
@@ -43,6 +45,7 @@ import {useAppDispatch} from 'src/store/hooks';
 import {MenuTooltip} from '../inputs/tooltip';
 import {getRenderMode, getSelectedTheme} from 'src/store/settingsSlice';
 import {useTranslation} from 'react-i18next';
+import {isHallEffectKeyboard} from 'src/utils/hall-effect';
 
 const MenuContainer = styled.div`
   padding: 15px 10px 20px 10px;
@@ -74,6 +77,7 @@ const Rows = [
   Lighting,
   SaveLoad,
   RotaryEncoder,
+  HallEffect,
   ...makeCustomMenus([]),
 ];
 
@@ -105,6 +109,9 @@ const getRowsForKeyboard = (): typeof Rows => {
         Macros,
         SaveLoad,
       ]),
+      ...(isHallEffectKeyboard(selectedDefinition.vendorProductId)
+        ? [HallEffect]
+        : []),
       ...v3Menus,
     ];
   } else {
@@ -257,11 +264,12 @@ const ConfigureGrid = () => {
   const selectedTitle = KeyboardRows[selectedRow]?.Title;
 
   useEffect(() => {
-    if (selectedTitle !== 'Keymap') {
+    if (selectedTitle !== 'Keymap' && selectedTitle !== HallEffect.Title) {
       dispatch(setConfigureKeyboardIsSelectable(false));
     } else {
       dispatch(setConfigureKeyboardIsSelectable(true));
     }
+    dispatch(setAllowMultiSelect(selectedTitle === HallEffect.Title));
   }, [selectedTitle]);
 
   return (

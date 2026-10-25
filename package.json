@@ -1,8 +1,8 @@
 {
   "license": "GPL-3.0",
   "scripts": {
-    "dev": "node scripts/build-definitions.js && vite --force",
-    "build": "bun run build:kbs && tsc && vite build",
+    "dev": "node scripts/build-definitions.js && node scripts/build-local-definitions.js && vite --force",
+    "build": "bun run build:kbs && node scripts/build-local-definitions.js && tsc && vite build",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "refresh-kbs": "bun update --force via-keyboards",

@@ -4,7 +4,7 @@ import glbSrc from 'assets/models/keyboard_components.glb';
 import {useMemo} from 'react';
 import {getBasicKeyToByte} from 'src/store/definitionsSlice';
 import {useAppDispatch, useAppSelector} from 'src/store/hooks';
-import {getSelectedKey} from 'src/store/keymapSlice';
+import {getExtraSelectedKeys, getSelectedKey} from 'src/store/keymapSlice';
 import {getExpressions} from 'src/store/macrosSlice';
 import {getHostKeyboardLayout, getSelectedSRGBTheme} from 'src/store/settingsSlice';
 import {keymapExtras} from 'src/utils/keymap-extras';
@@ -48,6 +48,7 @@ export const KeyGroup: React.FC<KeyGroupProps<ThreeEvent<MouseEvent>>> = (
   const dispatch = useAppDispatch();
   const keycapScene = useGLTF(glbSrc, true).scene;
   const selectedKey = useAppSelector(getSelectedKey);
+  const extraSelectedKeys = useAppSelector(getExtraSelectedKeys);
   const selectedSRGBTheme = useAppSelector(getSelectedSRGBTheme);
   const macroExpressions = useAppSelector(getExpressions);
   const skipFontCheck = useSkipFontCheck();
@@ -82,6 +83,7 @@ export const KeyGroup: React.FC<KeyGroupProps<ThreeEvent<MouseEvent>>> = (
         props,
         keysKeys,
         selectedKeyIndex,
+        extraSelectedKeys,
         labels,
         skipFontCheck,
       );
@@ -101,6 +103,7 @@ export const KeyGroup: React.FC<KeyGroupProps<ThreeEvent<MouseEvent>>> = (
   }, [
     keys,
     selectedKeyIndex,
+    extraSelectedKeys,
     labels,
     props.pressedKeys,
     props.selectable,

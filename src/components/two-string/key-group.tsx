@@ -1,7 +1,7 @@
 import {useMemo} from 'react';
 import {getBasicKeyToByte} from 'src/store/definitionsSlice';
 import {useAppDispatch, useAppSelector} from 'src/store/hooks';
-import {getSelectedKey} from 'src/store/keymapSlice';
+import {getExtraSelectedKeys, getSelectedKey} from 'src/store/keymapSlice';
 import {getExpressions} from 'src/store/macrosSlice';
 import {getHostKeyboardLayout, getSelectedTheme} from 'src/store/settingsSlice';
 import {keymapExtras} from 'src/utils/keymap-extras';
@@ -49,6 +49,7 @@ const getRGBArray = (keyColors: number[][]) => {
 export const KeyGroup: React.FC<KeyGroupProps<React.MouseEvent>> = (props) => {
   const dispatch = useAppDispatch();
   const selectedKey = useAppSelector(getSelectedKey);
+  const extraSelectedKeys = useAppSelector(getExtraSelectedKeys);
   const selectedTheme = useAppSelector(getSelectedTheme);
   const macroExpressions = useAppSelector(getExpressions);
   const skipFontCheck = useSkipFontCheck();
@@ -85,6 +86,7 @@ export const KeyGroup: React.FC<KeyGroupProps<React.MouseEvent>> = (props) => {
             props,
             keysKeys,
             selectedKeyIndex,
+            extraSelectedKeys,
             labels,
             skipFontCheck,
           )}
@@ -94,6 +96,7 @@ export const KeyGroup: React.FC<KeyGroupProps<React.MouseEvent>> = (props) => {
   }, [
     keys,
     selectedKeyIndex,
+    extraSelectedKeys,
     labels,
     props.pressedKeys,
     props.selectable,

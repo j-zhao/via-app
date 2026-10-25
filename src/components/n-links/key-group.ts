@@ -1,6 +1,6 @@
 import {getBoundingBox, Result, VIAKey} from '@the-via/reader';
 import {useAppDispatch} from 'src/store/hooks';
-import {updateSelectedKey} from 'src/store/keymapSlice';
+import {selectKey} from 'src/store/keymapSlice';
 import {
   KeycapSharedProps,
   KeyGroupProps,
@@ -24,6 +24,7 @@ export function getKeycapSharedProps<T>(
   props: KeyGroupProps<T>,
   keysKeys: KeysKeys<T>,
   selectedKeyIndex: number | null,
+  extraSelectedKeys: number[],
   labels: any[],
   skipFontCheck: boolean,
 ): KeycapSharedProps<T> {
@@ -52,7 +53,7 @@ export function getKeycapSharedProps<T>(
     onPointerOver: onPointerOver,
     keyState: props.pressedKeys ? props.pressedKeys[i] : -1,
     disabled: !props.selectable,
-    selected: i === selectedKeyIndex,
+    selected: i === selectedKeyIndex || extraSelectedKeys.includes(i),
     idx: idx,
     label: labels[i],
     onClick: onClick,
@@ -142,7 +143,7 @@ export function getKeysKeys<T>(
         idx: i,
         onClick: (evt: any, idx: number) => {
           evt.stopPropagation();
-          dispatch(updateSelectedKey(idx));
+          dispatch(selectKey({idx, additive: evt.ctrlKey || evt.metaKey}));
         },
         onPointerDown: props.onKeycapPointerDown,
         onPointerOver: props.onKeycapPointerOver,
