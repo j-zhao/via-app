@@ -3,6 +3,12 @@
 
 <head>
   <meta charset="utf-8" />
+  <script>
+    // WebHID only works in a secure context, and GitHub Pages does not redirect this site to HTTPS.
+    if (location.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+      location.replace('https:' + location.href.slice('http:'.length));
+    }
+  </script>
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
