@@ -136,82 +136,60 @@ const HelpText = styled.div`
   max-width: 420px;
 `;
 
-const StoredValue: FC<{
-  name: string;
-  help: string;
-  value: string;
-  raw: number;
-}> = ({name, help, value, raw}) => (
-  <ControlRow>
-    <Label>
-      {name}
-      <HelpText>{help}</HelpText>
-    </Label>
-    <Detail>
-      {value} (raw {raw})
-    </Detail>
-  </ControlRow>
-);
+const SaveSummary = styled.div`
+  align-self: stretch;
+  margin: 12px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--color_label);
+  border-radius: 4px;
+  color: var(--color_label);
+  font-size: 15px;
+`;
 
-// Shows each stored field in mm next to the raw byte the firmware keeps.
-const StoredValues: FC<{actuation: Actuation}> = ({actuation}) => {
-  const rtOn = actuation.rtMode !== RapidTriggerMode.Off;
-  return (
-    <>
-      <ControlRow>
-        <Label>
-          Stored on the keyboard
-          <HelpText>
-            The firmware stores travel as 0 to 255 over 3.5 mm. 1 raw unit is
-            about 0.014 mm.
-          </HelpText>
-        </Label>
-      </ControlRow>
-      <StoredValue
-        name="Actuation point"
-        help="The key presses when it goes deeper than this point."
-        value={formatMm(actuation.actuationPoint)}
-        raw={actuation.actuationPoint}
-      />
-      <StoredValue
-        name="Release point"
-        help="The key releases when it comes back above this point. Raw 255 means about 0.1 mm above the actuation point."
-        value={
-          actuation.resetPoint === RESET_AT_ACTUATION
-            ? 'Automatic'
-            : formatMm(actuation.resetPoint)
-        }
-        raw={actuation.resetPoint}
-      />
-      <StoredValue
-        name="Rapid Trigger mode"
-        help="Raw 0 is off, 1 is Rapid Trigger, 2 is Continuous."
-        value={RT_OPTIONS[actuation.rtMode]?.label ?? 'Unknown'}
-        raw={actuation.rtMode}
-      />
-      {rtOn && (
-        <>
-          <StoredValue
-            name="Press sensitivity"
-            help="After a release, the key presses again when it moves down by this distance."
-            value={formatMm(actuation.rtPress)}
-            raw={actuation.rtPress}
-          />
-          <StoredValue
-            name="Release sensitivity"
-            help="After a press, the key releases when it moves up by this distance. Raw 0 means the same as press sensitivity."
-            value={
-              actuation.rtRelease === 0
-                ? 'Same as press'
-                : formatMm(actuation.rtRelease)
-            }
-            raw={actuation.rtRelease}
-          />
-        </>
-      )}
-    </>
-  );
+const RawBytes = styled.div`
+  margin-top: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  opacity: 0.7;
+`;
+
+// Rapid Trigger ignores an explicit release point, and the firmware rejects stale ones.
+const valuesToWrite = (actuation: Actuation): Actuation =>
+  actuation.rtMode === RapidTriggerMode.Off
+    ? actuation
+    : {...actuation, resetPoint: RESET_AT_ACTUATION};
+
+const describeActuation = (actuation: Actuation) => {
+  const parts = [`Actuation ${formatMm(actuation.actuationPoint)}`];
+  if (actuation.rtMode === RapidTriggerMode.Off) {
+    parts.push(
+      actuation.resetPoint === RESET_AT_ACTUATION
+        ? 'release automatic'
+        : `release ${formatMm(actuation.resetPoint)}`,
+    );
+  } else {
+    const mode = RT_OPTIONS[actuation.rtMode]?.label ?? 'Unknown mode';
+    parts.push(
+      actuation.rtRelease === 0
+        ? `${mode} ${formatMm(actuation.rtPress)} both ways`
+        : `${mode} press ${formatMm(actuation.rtPress)}, release ${formatMm(
+            actuation.rtRelease,
+          )}`,
+    );
+  }
+  return parts.join(' · ');
 };
+
+// A read-only summary of what Save writes, with the raw firmware bytes.
+const SavePreview: FC<{actuation: Actuation}> = ({actuation}) => (
+  <SaveSummary>
+    Saves: {describeActuation(actuation)}
+    <RawBytes title="Actuation, release (255 = automatic), Rapid Trigger mode, press, release (0 = same as press). 1 unit = 3.5 mm / 255.">
+      raw {actuation.actuationPoint} {actuation.resetPoint} {actuation.rtMode}{' '}
+      {actuation.rtPress} {actuation.rtRelease}
+    </RawBytes>
+  </SaveSummary>
+);
 
 export const Pane: FC = () => {
   const api = useAppSelector(getSelectedKeyboardAPI);
@@ -319,11 +297,7 @@ export const Pane: FC = () => {
     let saved = 0;
     setSaving(true);
     try {
-      // Rapid Trigger ignores an explicit release point, and the firmware rejects stale ones.
-      const toWrite =
-        actuation.rtMode === RapidTriggerMode.Off
-          ? actuation
-          : {...actuation, resetPoint: RESET_AT_ACTUATION};
+      const toWrite = valuesToWrite(actuation);
       for (const idx of targets) {
         await setActuation(api, profile, keys[idx].row, keys[idx].col, toWrite);
         saved++;
@@ -553,7 +527,7 @@ export const Pane: FC = () => {
                     </Detail>
                   </ControlRow>
                 )}
-              <StoredValues actuation={actuation} />
+              <SavePreview actuation={valuesToWrite(actuation)} />
               <ControlRow>
                 <Label />
                 <Detail>
